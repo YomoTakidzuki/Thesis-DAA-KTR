@@ -20,25 +20,25 @@ import re
 from collections import Counter
 from datetime import datetime, timedelta
 
-import pandas as pd                      # Tabular data handling (DataFrame, CSV/XLSX/Parquet IO)
+import pandas as pd   # Tabular data handling (DataFrame, CSV/XLSX/Parquet IO)
 from dateutil.parser import parse as du_parse  # Robust ISO-like date parser (fallback for strict formats)
-import dateparser                        # Human-friendly, multi-language date parsing (RU/EN strings, “Sep 2025”, etc.)
-import matplotlib.pyplot as plt          # Lightweight plotting for quick diagnostic figures (no seaborn on purpose)
+import dateparser     # Human-friendly, multi-language date parsing (RU/EN strings, “Sep 2025”, etc.)
+import matplotlib.pyplot as plt # Lightweight plotting for quick diagnostic figures (no seaborn on purpose)
 
 # Reference date used to align/normalize timelines across cases
 ANCHOR_DATE = datetime(2025, 9, 16)
 
 # Columns that MUST exist in the input dataset. The loader will validate against this list.
 REQUIRED_COLS = [
-    "case",            # Case label: "DAA" or "KTR"
+    "case",     # Case label: "DAA" or "KTR"
     "source_platform", # Review source: "GoogleMaps" / "YandexMaps"
-    "rating_1_5",      # Integer or float rating in [1..5]
-    "text",            # Review text (can be empty if has_text == "no")
-    "stance",          # Sentiment/stance class: positive/negative/neutral/mixed
-    "theme_codes",     # One or more thematic codes (pipe/comma separated)
-    "pulled_by",       # Collector/annotator ID or label (non-PII)
-    "post_date",       # Original date string from the platform
-    "has_text",        # "yes"/"no" — whether the review contains any text
+    "rating_1_5", # Integer or float rating in [1..5]
+    "text", # Review text (can be empty if has_text == "no")
+    "stance", # Sentiment/stance class: positive/negative/neutral/mixed
+    "theme_codes", # One or more thematic codes (pipe/comma separated)
+    "pulled_by",  # Collector/annotator ID or label (non-PII)
+    "post_date", # Original date string from the platform
+    "has_text",  # "yes"/"no" — whether the review contains any text
 ]
 
 # Allowed vocabularies for basic schema validation / cleaning
@@ -53,16 +53,16 @@ ALLOWED_HAS_TEXT = {"yes", "no"}
 
 REL_PATTERNS = [
     # --- Russian language variants ---
-    (r"(\d+)\s*(год|года|лет)\s*назад", "years"),       # e.g. "3 года назад"
+    (r"(\d+)\s*(год|года|лет)\s*назад", "years"),  # e.g. "3 года назад"
     (r"(\d+)\s*(месяц|месяца|месяцев)\s*назад", "months"), # e.g. "2 месяца назад"
-    (r"(\d+)\s*(неделю|недели|недель)\s*назад", "weeks"),  # e.g. "1 неделю назад"
-    (r"(\d+)\s*(день|дня|дней)\s*назад", "days"),          # e.g. "5 дней назад"
+    (r"(\d+)\s*(неделю|недели|недель)\s*назад", "weeks"), # e.g. "1 неделю назад"
+    (r"(\d+)\s*(день|дня|дней)\s*назад", "days"),  # e.g. "5 дней назад"
 
     # --- English language variants ---
-    (r"(\d+)\s*(year|years)\s*ago", "years"),           # e.g. "3 years ago"
-    (r"(\d+)\s*(month|months)\s*ago", "months"),        # e.g. "2 months ago"
-    (r"(\d+)\s*(week|weeks)\s*ago", "weeks"),           # e.g. "1 week ago"
-    (r"(\d+)\s*(day|days)\s*ago", "days"),              # e.g. "5 days ago"
+    (r"(\d+)\s*(year|years)\s*ago", "years"),   # e.g. "3 years ago"
+    (r"(\d+)\s*(month|months)\s*ago", "months"),   # e.g. "2 months ago"
+    (r"(\d+)\s*(week|weeks)\s*ago", "weeks"),   # e.g. "1 week ago"
+    (r"(\d+)\s*(day|days)\s*ago", "days"),  # e.g. "5 days ago"
 ]
 
 
@@ -182,8 +182,8 @@ def validate_schema(df: pd.DataFrame) -> dict:
     """
 
     report = {
-        "missing_required": [],  # List of missing mandatory columns
-        "value_issues": {}       # Dict of columns with unexpected categorical values
+        "missing_required": [], # List of missing mandatory columns
+        "value_issues": {} # Dict of columns with unexpected categorical values
     }
 
     # --- check for missing mandatory columns ---
@@ -212,7 +212,7 @@ def validate_schema(df: pd.DataFrame) -> dict:
 
     # --- Validate categorical values against allowed vocabularies ---
 
-    issues = {}  # temporary container for columns that contain invalid entries
+    issues = {} # temporary container for columns that contain invalid entries
 
     # CASE column — must be either "DAA" or "KTR"
     bad_case = df.loc[~df["case"].isin(ALLOWED_CASE), "case"]
