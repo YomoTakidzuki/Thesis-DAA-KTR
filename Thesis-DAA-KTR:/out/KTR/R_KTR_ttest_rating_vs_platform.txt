@@ -1,0 +1,12 @@
+
+	Welch Two Sample t-test
+
+data:  rating_1_5_num by source_platform
+t = 1.2167, df = 239.88, p-value = 0.2249
+alternative hypothesis: true difference in means between group GoogleMaps and group YandexMaps is not equal to 0
+95 percent confidence interval:
+ -0.1098035  0.4645640
+sample estimates:
+mean in group GoogleMaps mean in group YandexMaps 
+                 4.20197                  4.02459 
+

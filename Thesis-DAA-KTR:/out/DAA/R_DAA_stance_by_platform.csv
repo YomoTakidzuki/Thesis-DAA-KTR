@@ -1,0 +1,9 @@
+source_platform,stance,n,p
+GoogleMaps,neutral,111,0.5138888888888888
+GoogleMaps,positive,80,0.37037037037037035
+GoogleMaps,negative,15,0.06944444444444445
+GoogleMaps,mixed,10,0.046296296296296294
+YandexMaps,positive,261,0.696
+YandexMaps,mixed,54,0.144
+YandexMaps,negative,43,0.11466666666666667
+YandexMaps,neutral,17,0.04533333333333334
