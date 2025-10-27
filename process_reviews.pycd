@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """
 process_reviews.py
-Предобработка отзывов для кейсов DAA/KTR:
-- валидация схемы,
-- отчёты по пропускам/частотам/дубликатам,
-- нормализация дат в post_date_norm (якорь 2025-09-16),
-- сохранение чистых данных в Parquet/Feather,
-- стартовые выгрузки CSV + список уникальных theme_codes,
-- два простых графика (матплотлиб, без seaborn).
+
+Preprocessing pipeline for online feedback on the DAA and KTR case studies.
+
+Main tasks:
+- Validate the input data schema (required columns, data types).
+- Identify skipped, missing, or duplicated reviews.
+- Normalize review dates to a consistent timeline
+  (anchor date: 2025-09-16, for cross-case alignment).
+- Save the cleaned dataset in Parquet and Feather formats.
+- Generate basic CSV exports and a list of unique theme codes.
+- Produce two quick visualizations using matplotlib (no seaborn dependency).
 """
 
 import argparse
@@ -16,334 +20,583 @@ import re
 from collections import Counter
 from datetime import datetime, timedelta
 
-import pandas as pd
-from dateutil.parser import parse as du_parse
-import dateparser
-import matplotlib.pyplot as plt
+import pandas as pd                      # Tabular data handling (DataFrame, CSV/XLSX/Parquet IO)
+from dateutil.parser import parse as du_parse  # Robust ISO-like date parser (fallback for strict formats)
+import dateparser                        # Human-friendly, multi-language date parsing (RU/EN strings, “Sep 2025”, etc.)
+import matplotlib.pyplot as plt          # Lightweight plotting for quick diagnostic figures (no seaborn on purpose)
 
+# Reference date used to align/normalize timelines across cases
+ANCHOR_DATE = datetime(2025, 9, 16)
 
-ANCHOR_DATE = datetime(2025, 9, 16)   # якорная дата из ТЗ
-REQUIRED_COLS = ["case", "source_platform", "rating_1_5", "text", "stance", "theme_codes", "pulled_by", "post_date", "has_text"]
+# Columns that MUST exist in the input dataset. The loader will validate against this list.
+REQUIRED_COLS = [
+    "case",            # Case label: "DAA" or "KTR"
+    "source_platform", # Review source: "GoogleMaps" / "YandexMaps"
+    "rating_1_5",      # Integer or float rating in [1..5]
+    "text",            # Review text (can be empty if has_text == "no")
+    "stance",          # Sentiment/stance class: positive/negative/neutral/mixed
+    "theme_codes",     # One or more thematic codes (pipe/comma separated)
+    "pulled_by",       # Collector/annotator ID or label (non-PII)
+    "post_date",       # Original date string from the platform
+    "has_text",        # "yes"/"no" — whether the review contains any text
+]
+
+# Allowed vocabularies for basic schema validation / cleaning
 ALLOWED_CASE = {"DAA", "KTR"}
 ALLOWED_SOURCE = {"GoogleMaps", "YandexMaps"}
 ALLOWED_STANCE = {"positive", "negative", "neutral", "mixed"}
 ALLOWED_HAS_TEXT = {"yes", "no"}
 
+# Patterns for parsing *relative* date expressions (e.g., "2 months ago", "3 года назад").
+# The order matters: longer periods (years → months → weeks → days) must be checked first
+# to avoid overlapping matches in compound strings.
+
 REL_PATTERNS = [
-    # порядок важен: сначала годы/месяцы/недели/дни (мн./ед.), русские варианты
-    (r"(\d+)\s*(год|года|лет)\s*назад", "years"),
-    (r"(\d+)\s*(месяц|месяца|месяцев)\s*назад", "months"),
-    (r"(\d+)\s*(неделю|недели|недель)\s*назад", "weeks"),
-    (r"(\d+)\s*(день|дня|дней)\s*назад", "days"),
-    # на всякий — английские формы, если вдруг встречаются
-    (r"(\d+)\s*(year|years)\s*ago", "years"),
-    (r"(\d+)\s*(month|months)\s*ago", "months"),
-    (r"(\d+)\s*(week|weeks)\s*ago", "weeks"),
-    (r"(\d+)\s*(day|days)\s*ago", "days"),
+    # --- Russian language variants ---
+    (r"(\d+)\s*(год|года|лет)\s*назад", "years"),       # e.g. "3 года назад"
+    (r"(\d+)\s*(месяц|месяца|месяцев)\s*назад", "months"), # e.g. "2 месяца назад"
+    (r"(\d+)\s*(неделю|недели|недель)\s*назад", "weeks"),  # e.g. "1 неделю назад"
+    (r"(\d+)\s*(день|дня|дней)\s*назад", "days"),          # e.g. "5 дней назад"
+
+    # --- English language variants ---
+    (r"(\d+)\s*(year|years)\s*ago", "years"),           # e.g. "3 years ago"
+    (r"(\d+)\s*(month|months)\s*ago", "months"),        # e.g. "2 months ago"
+    (r"(\d+)\s*(week|weeks)\s*ago", "weeks"),           # e.g. "1 week ago"
+    (r"(\d+)\s*(day|days)\s*ago", "days"),              # e.g. "5 days ago"
 ]
 
 
 def parse_args():
-    ap = argparse.ArgumentParser(description="Preprocess DAA/KTR reviews")
-    ap.add_argument("--input", required=True,
-                    help="Путь к файлу с отзывами (.xlsx или .csv)")
-    ap.add_argument("--sheet", default=None,
-                    help="Имя листа Excel (если .xlsx и нужен конкретный лист)")
-    ap.add_argument("--outdir", default=os.path.expanduser("~/Thesis-DAA-KTR/out"),
-                    help="Папка для сохранения результатов")
+    """
+    Parse command-line arguments for the DAA/KTR review preprocessing script.
+
+    Expected arguments:
+      --input   : Path to the input feedback file (.xlsx or .csv)
+      --sheet   : (Optional) Excel sheet name, if the file has multiple sheets
+      --outdir  : Output directory for cleaned data and figures
+    """
+
+    ap = argparse.ArgumentParser(
+        description="Preprocess and clean DAA/KTR online review data"
+    )
+
+    # Required input file (.xlsx or .csv)
+    ap.add_argument(
+        "--input",
+        required=True,
+        help="Path to the input feedback file (.xlsx or .csv)"
+    )
+
+    # Optional Excel sheet name, used only when the input file is .xlsx
+    ap.add_argument(
+        "--sheet",
+        default=None,
+        help="Excel sheet name (only if multiple sheets exist)"
+    )
+
+    # Output directory — defaults to a local thesis path
+    ap.add_argument(
+        "--outdir",
+        default=os.path.expanduser("~/Thesis-DAA-KTR/out"),
+        help="Directory for saving cleaned data and diagnostic figures"
+    )
+
     return ap.parse_args()
 
-
 def load_data(path: str, sheet: str | None) -> pd.DataFrame:
+    """
+    Load review data from a given file path (Excel or CSV).
+
+    This function automatically detects the file extension and chooses the
+    appropriate pandas reader. If a CSV file is encoded with a non-UTF8 charset,
+    it attempts to detect the encoding using the `chardet` library.
+
+    Parameters
+    ----------
+    path : str
+        Path to the input file (.xlsx or .csv).
+    sheet : str or None
+        Optional Excel sheet name (used only for .xlsx files).
+
+    Returns
+    -------
+    pd.DataFrame
+        Loaded DataFrame containing the raw reviews.
+
+    Raises
+    ------
+    ValueError
+        If the file extension is not supported.
+
+    Example
+    -------
+    >>> df = load_data("data/reviews_master.xlsx", sheet="DAA")
+    >>> df.shape
+    (120, 9)
+    """
+
+    # Determine file extension (lowercase for consistency)
     ext = os.path.splitext(path)[1].lower()
+
+    # --- Excel files (.xlsx / .xls) ---
     if ext in [".xlsx", ".xls"]:
         return pd.read_excel(path, sheet_name=sheet, engine="openpyxl")
+
+    # --- CSV files ---
     elif ext == ".csv":
-        # попробуем сначала utf-8, затем угадать
         try:
             return pd.read_csv(path)
         except UnicodeDecodeError:
+            # Attempt to detect encoding if not UTF-8
             import chardet
             with open(path, "rb") as f:
                 enc = chardet.detect(f.read())["encoding"] or "utf-8"
             return pd.read_csv(path, encoding=enc)
+
+    # --- Unsupported file formats ---
     else:
-        raise ValueError(f"Неподдерживаемое расширение файла: {ext}")
+        raise ValueError(f"Unsupported file extension: {ext}")
 
 
 def validate_schema(df: pd.DataFrame) -> dict:
-    report = {"missing_required": [], "value_issues": {}}
+    """
+    Validate that the input DataFrame conforms to the expected schema.
+
+    Checks performed:
+      1. Whether all required columns are present.
+      2. Whether categorical columns (case, source_platform, stance, has_text)
+         contain only allowed values.
+
+    Returns
+    -------
+    dict
+        Dictionary-based validation report with two keys:
+        - "missing_required": list of columns that were not found in df
+        - "value_issues": mapping of column → set of unexpected values
+
+    Example
+    -------
+    >>> report = validate_schema(df)
+    >>> print(report["missing_required"])
+    ['theme_codes']
+    """
+
+    report = {
+        "missing_required": [],  # List of missing mandatory columns
+        "value_issues": {}       # Dict of columns with unexpected categorical values
+    }
+
+    # --- check for missing mandatory columns ---
     for col in REQUIRED_COLS:
         if col not in df.columns:
             report["missing_required"].append(col)
 
-    # Если критических колонок нет — дальше смысла валидировать значения нет
+    # If critical columns are missing, stop validation early.
+    # There is no point in checking value consistency if the schema itself is incomplete.
     if report["missing_required"]:
         return report
 
-    # Приведём некоторые типы/нижний регистр по правилам
+    # --- Standardize column types and capitalization before validation ---
+
+    # Convert 'case' and 'source_platform' to string (avoids NaN/object type errors)
     df["case"] = df["case"].astype(str)
     df["source_platform"] = df["source_platform"].astype(str)
+
+    # Convert 'stance' and 'has_text' to lowercase strings
+    # to ensure that 'Positive' and 'positive' are treated as the same value.
     df["stance"] = df["stance"].astype(str).str.lower()
     df["has_text"] = df["has_text"].astype(str).str.lower()
 
-    # Проверка допустимых значений
+    # Checking acceptable values
     issues = {}
 
+    # --- Validate categorical values against allowed vocabularies ---
+
+    issues = {}  # temporary container for columns that contain invalid entries
+
+    # CASE column — must be either "DAA" or "KTR"
     bad_case = df.loc[~df["case"].isin(ALLOWED_CASE), "case"]
     if not bad_case.empty:
+        # Count frequency of invalid values to help identify common typos
         issues["case"] = Counter(bad_case)
 
-    bad_src = df.loc[~df["source_platform"].isin(ALLOWED_SOURCE), "source_platform"]
-    if not bad_src.empty:
-        issues["source_platform"] = Counter(bad_src)
+    # SOURCE_PLATFORM column — must be "GoogleMaps" or "YandexMaps"
+    bad_source = df.loc[~df["source_platform"].isin(ALLOWED_SOURCE), "source_platform"]
+    if not bad_source.empty:
+        issues["source_platform"] = Counter(bad_source)
 
+    # STANCE column — must belong to {"positive", "negative", "neutral", "mixed"}
     bad_stance = df.loc[~df["stance"].isin(ALLOWED_STANCE), "stance"]
     if not bad_stance.empty:
         issues["stance"] = Counter(bad_stance)
 
-    bad_has_text = df.loc[~df["has_text"].isin(ALLOWED_HAS_TEXT), "has_text"]
-    if not bad_has_text.empty:
-        issues["has_text"] = Counter(bad_has_text)
+    # HAS_TEXT column — must be either "yes" or "no"
+    bad_hastext = df.loc[~df["has_text"].isin(ALLOWED_HAS_TEXT), "has_text"]
+    if not bad_hastext.empty:
+        issues["has_text"] = Counter(bad_hastext)
 
-    # rating_1_5 как целое 1–5 (если столбец есть)
-    if "rating_1_5" in df.columns:
-        # принудительно к числу
-        df["rating_1_5"] = pd.to_numeric(df["rating_1_5"], errors="coerce").astype("Int64")
-        bad_rating = df.loc[~df["rating_1_5"].isin([1, 2, 3, 4, 5]), "rating_1_5"]
-        if not bad_rating.empty:
-            issues["rating_1_5"] = Counter(bad_rating.dropna())
-
-    report["value_issues"] = {k: dict(v) for k, v in issues.items()}
+    # Save all discovered issues to the report dictionary
+    report["value_issues"] = issues
     return report
 
 
 def normalize_theme_codes_format(df: pd.DataFrame) -> pd.Series:
     """
-    Просто проверяем формат: латиница/цифры/_ и ; без пробелов.
-    Возвращаем булеву серию — True если формат ок или пусто.
+    Check that the 'theme_codes' column follows the expected format.
+
+    The valid format allows:
+        - lowercase Latin letters, digits, and underscores;
+        - multiple codes separated by semicolons;
+        - no spaces anywhere in the string.
+
+    Returns
+    -------
+    pd.Series (bool)
+        True for rows with valid or empty values, False otherwise.
     """
+    # If there is no 'theme_codes' column, consider all rows as valid.
     if "theme_codes" not in df.columns:
         return pd.Series([True] * len(df), index=df.index)
-    pat = re.compile(r"^[a-z0-9_]+(?:;[a-z0-9_]+)*$")  # допустимы цифры тоже
-    ok = df["theme_codes"].fillna("").astype(str).str.strip().apply(lambda s: (s == "") or bool(pat.fullmatch(s)))
+
+    # Regular expression:
+    #   - ^[a-z0-9_]+       starts with at least one valid character
+    #   - (?:;[a-z0-9_]+)*  optionally followed by semicolon-separated codes
+    #   - $                 must end after the last code (no trailing spaces)
+    pat = re.compile(r"^[a-z0-9_]+(?:;[a-z0-9_]+)*$")
+
+    # Fill missing values with empty strings, convert to str, strip spaces,
+    # and mark True if the string is empty or matches the expected pattern.
+    ok = df["theme_codes"].fillna("").astype(str).str.strip().apply(
+        lambda s: (s == "") or bool(pat.fullmatch(s))
+    )
+
     return ok
 
 
 def rel_to_date(anchor: datetime, n: int, unit: str) -> datetime:
+    # Convert relative expressions like "3 months ago" into an absolute date
+    # based on a given anchor date (e.g., ANCHOR_DATE = 2025-09-16).
+
     if unit == "years":
+        # Subtract full years directly using datetime.replace
         return anchor.replace(year=anchor.year - n)
+
     if unit == "months":
-        # грубо: минус n месяцев через year/month арифметику
+        # Subtract n months while correctly adjusting year and month values
         y = anchor.year
         m = anchor.month - n
         while m <= 0:
             y -= 1
             m += 12
-        # день — минимум из текущего дня и макс. дней в новой месяце
-        day = min(anchor.day, [31, 29 if y % 4 == 0 and (y % 100 != 0 or y % 400 == 0) else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m-1])
+
+        # Adjust the day value to fit the target month
+        # Use the smaller of (original day) and (last valid day in new month)
+        day = min(
+            anchor.day,
+            [31, 29 if y % 4 == 0 and (y % 100 != 0 or y % 400 == 0) else 28,
+             31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1]
+        )
         return anchor.replace(year=y, month=m, day=day)
+
     if unit == "weeks":
+        # Subtract whole weeks
         return anchor - timedelta(weeks=n)
+
     if unit == "days":
+        # Subtract exact number of days
         return anchor - timedelta(days=n)
+
+    # Unknown unit → return None for safety
     return None
 
-
 def parse_post_date(raw: str) -> pd.Timestamp | pd.NaT:
+    # Parse a raw date string into a pandas Timestamp.
+    # If the input is empty, null, or not a string, return NaT (Not-a-Time).
+
     if not isinstance(raw, str) or raw.strip() == "":
-        return pd.NaT
+        return pd.NaT  # Missing or invalid input → treat as no date
 
     s = raw.strip().lower()
-    # 1) относительные даты
+    # 1) Relative date expressions (e.g., "3 months ago", "2 года назад")
     for pat, unit in REL_PATTERNS:
         m = re.search(pat, s)
         if m:
             try:
+                # Extract the numeric value (n) and convert to an absolute date
                 n = int(m.group(1))
                 dt = rel_to_date(ANCHOR_DATE, n, unit)
+
+                # Return a pandas Timestamp if successful, otherwise NaT
                 return pd.Timestamp(dt.date()) if dt else pd.NaT
             except Exception:
+                # In case of parsing errors (invalid number or overflow)
                 return pd.NaT
 
-    # 2) абсолютные: пробуем dateparser (рус/англ/др. локали), затем dateutil
+    # 2) Absolute dates: first try dateparser (handles multiple locales: RU/EN/etc.),
+    #    then fall back to dateutil for general ISO or mixed formats.
     dt = dateparser.parse(s, settings={"DATE_ORDER": "DMY"})
     if dt:
+        # Successfully parsed using dateparser → convert to pandas Timestamp
         return pd.Timestamp(dt.date())
+
     try:
+        # Use dateutil as a fallback (more tolerant of irregular formats)
         dt2 = du_parse(s, dayfirst=True, fuzzy=True)
         return pd.Timestamp(dt2.date())
     except Exception:
+        # If both parsers fail, return NaT (missing date)
         return pd.NaT
-
 
 def main():
     args = parse_args()
     os.makedirs(args.outdir, exist_ok=True)
 
     # ===== Load =====
+    # Read the raw input file (.xlsx or .csv) into a DataFrame
     df = load_data(args.input, args.sheet)
 
     # ===== Schema validation =====
+    # Verify that all required columns exist and contain valid categorical values
     schema_report = validate_schema(df.copy())
 
-    # Стоп, если не хватает критичных столбцов
-    critical_missing = [c for c in ["case", "source_platform", "stance"] if c in schema_report.get("missing_required", [])]
+    # Stop execution if critical columns are missing
+    # ('case', 'source_platform', and 'stance' are essential for further analysis)
+    critical_missing = [
+        c for c in ["case", "source_platform", "stance"]
+        if c in schema_report.get("missing_required", [])
+    ]
     if critical_missing:
-        print("ОШИБКА: отсутствуют критически важные столбцы:", ", ".join(critical_missing))
-        print("Пожалуйста, поправь файл и запусти скрипт снова.")
+        print("ERROR: Critical columns are missing:", ", ".join(critical_missing))
+        print("Please correct the file and run the script again.")
         return
 
-    # Отчёт по пропускам и пустым text
+    # Generate a short report summarizing schema issues:
+    # - Columns that are missing from the dataset
+    # - Columns that contain invalid or unexpected values
     missing_cols = schema_report.get("missing_required", [])
     value_issues = schema_report.get("value_issues", {})
 
-    # гарантируем наличие некоторых столбцов (если нет — создадим пустые, чтобы не падать на сводках)
+    # Ensure that all required columns exist in the DataFrame.
+    # If any are missing, create them with empty (NA) values to prevent errors
+    # during summary generation or later analysis steps.
     for col in REQUIRED_COLS:
         if col not in df.columns:
             df[col] = pd.NA
 
-    # Пустые тексты (включая NaN/пустые строки)
+    # Identify empty text entries (including NaN or strings containing only spaces).
+    # This helps detect reviews that technically exist but have no written content.
     text_empty = df["text"].isna() | (df["text"].astype(str).str.strip() == "")
 
-    # ===== Возможные дубликаты =====
+    # ===== Potential duplicates =====
+    # Define the combination of columns used to identify duplicate reviews.
     dup_cols = ["case", "source_platform", "text", "rating_1_5"]
+
+    # Create a unique composite key by concatenating selected columns with "||"
     dup_key = df[dup_cols].astype(str).agg("||".join, axis=1)
+
+    # Count how many times each composite key appears
     dup_counts = dup_key.value_counts()
+
+    # Filter keys that appear more than once (potential duplicates)
     possible_dups = dup_counts[dup_counts > 1]
+
+    # Display the top 10 most frequent duplicate entries (for inspection)
     top10_dups = possible_dups.head(10)
 
-    # ===== Нормализация дат =====
+    # ===== Date normalization =====
+    # Apply the date-parsing function to standardize all date formats
+    # (handles both absolute and relative expressions).
     df["post_date_norm"] = df["post_date"].apply(parse_post_date)
+
+    # Calculate the share of rows where normalization failed (NaT values)
     not_norm_share = float(df["post_date_norm"].isna().mean())
 
-    # ===== Сохранение «чистого» слоя =====
+    # ===== Save the cleaned dataset =====
+    # Define output file paths for Parquet and Feather formats.
     clean_path_parquet = os.path.join(args.outdir, "reviews_master_clean.parquet")
     clean_path_feather = os.path.join(args.outdir, "reviews_master_clean.feather")
+
+    # Save to both columnar formats — efficient for R/Python interoperability.
     df.to_parquet(clean_path_parquet, index=False)
     df.to_feather(clean_path_feather)
 
-    # ===== Отчёты/сводки =====
+    # ===== Summary reports =====
+    # Total number of records in the dataset
     total = len(df)
+
+    # Cross-tabulation: distribution of reviews by case (DAA/KTR) and source platform
     crosstab_case_platform = pd.crosstab(df["case"], df["source_platform"], dropna=False)
 
+    # Count how many reviews have or lack text (including missing values)
     has_text_counts = df["has_text"].value_counts(dropna=False)
+
+    # Overall stance distribution (positive / negative / neutral / mixed)
     stance_overall = df["stance"].value_counts(dropna=False)
+
+    # Cross-tabulations:
+    #  - stance by source platform
+    #  - stance by case (DAA / KTR)
     stance_by_platform = pd.crosstab(df["source_platform"], df["stance"], dropna=False)
     stance_by_case = pd.crosstab(df["case"], df["stance"], dropna=False)
 
-    # Гистограмма рейтинга (если есть)
+    # Plot a histogram of ratings (if the column exists)
     rating_hist_path = os.path.join(args.outdir, "hist_rating_1_5.png")
+
     if "rating_1_5" in df.columns:
         plt.figure()
-        df["rating_1_5"].dropna().astype(int).plot(kind="hist", bins=[1,2,3,4,5,6], rwidth=0.9)
+        # Drop missing ratings, convert to int, and plot histogram with bin edges 1–5
+        df["rating_1_5"].dropna().astype(int).plot(kind="hist", bins=[1, 2, 3, 4, 5, 6], rwidth=0.9)
+
+        # Add title and axis labels for readability
         plt.title("Histogram: rating_1_5")
-        plt.xlabel("Rating (1-5)")
+        plt.xlabel("Rating (1–5)")
         plt.ylabel("Count")
+
+        # Save the plot to the output directory
         plt.savefig(rating_hist_path, dpi=200, bbox_inches="tight")
         plt.close()
 
-    # ===== Стартовые выгрузки =====
+    # ===== Initial exports =====
+    # Save the case × platform cross-tabulation as a CSV file
     counts_by_case_platform = crosstab_case_platform.copy()
     counts_by_case_platform.to_csv(os.path.join(args.outdir, "counts_by_case_platform.csv"))
 
-    stance_by_case_platform = pd.crosstab([df["case"], df["source_platform"]], df["stance"], dropna=False)
+    # Create and export a cross-tabulation of stance by both case and platform
+    stance_by_case_platform = pd.crosstab(
+        [df["case"], df["source_platform"]],
+        df["stance"],
+        dropna=False
+    )
     stance_by_case_platform.to_csv(os.path.join(args.outdir, "stance_by_case_platform.csv"))
 
-    # theme_codes — уникальные теги одной строкой
+    # theme_codes — collect all unique tags into a single line
     theme_codes_path = os.path.join(args.outdir, "theme_codes_raw.txt")
+
     if "theme_codes" in df.columns:
-        # собираем все теги, фильтруем пустые
+        # Collect all tags from the column, ignoring empty or missing values
         all_codes = []
         for s in df["theme_codes"].fillna(""):
             s = str(s).strip()
             if s:
+                # Split multiple codes separated by semicolons and clean each one
                 all_codes.extend([t.strip() for t in s.split(";") if t.strip()])
+
+        # Keep only unique tags and sort alphabetically
         uniq = sorted(set(all_codes))
+
+        # Save as a single semicolon-separated string in a text file
         with open(theme_codes_path, "w", encoding="utf-8") as f:
             f.write(";".join(uniq))
     else:
+        # If the column does not exist, create an empty file as a placeholder
         with open(theme_codes_path, "w", encoding="utf-8") as f:
             f.write("")
 
-    # ===== Простые графики по stance =====
+    # ===== Stance bar charts =====
     bar1_path = os.path.join(args.outdir, "bar_stance_by_case.png")
+
+    # Create a bar chart showing stance distribution by case (DAA / KTR)
     plt.figure()
     stance_by_case.plot(kind="bar")
+
+    # Add title, axis labels, and legend for clarity
     plt.title("Stance by CASE")
-    plt.xlabel("case")
-    plt.ylabel("count")
-    plt.legend(title="stance")
+    plt.xlabel("Case")
+    plt.ylabel("Count")
+    plt.legend(title="Stance")
+
+    # Adjust layout and save the figure
     plt.tight_layout()
     plt.savefig(bar1_path, dpi=200)
     plt.close()
 
-    bar2_path = os.path.join(args.outdir, "bar_stance_by_platform.png")
+    # ===== Stance bar charts =====
+    bar1_path = os.path.join(args.outdir, "bar_stance_by_case.png")
+
+    # Create a bar chart showing stance distribution by case (DAA / KTR)
     plt.figure()
-    stance_by_platform.plot(kind="bar")
-    plt.title("Stance by SOURCE PLATFORM")
-    plt.xlabel("source_platform")
-    plt.ylabel("count")
-    plt.legend(title="stance")
+    stance_by_case.plot(kind="bar")
+
+    # Add title, axis labels, and legend for clarity
+    plt.title("Stance by CASE")
+    plt.xlabel("Case")
+    plt.ylabel("Count")
+    plt.legend(title="Stance")
+
+    # Adjust layout and save the figure
     plt.tight_layout()
-    plt.savefig(bar2_path, dpi=200)
+    plt.savefig(bar1_path, dpi=200)
     plt.close()
 
-    # ===== Отчёт в консоль =====
-    print("\n=== САММАРИ ===")
-    print(f"Всего отзывов: {total}")
-    print("\nРазбивка по case × source_platform:")
+    # ===== Console summary report =====
+    print("\n=== SUMMARY ===")
+    print(f"Total number of reviews: {total}")
+
+    print("\nBreakdown by case × source_platform:")
     print(crosstab_case_platform)
 
-    print("\nДоли has_text (yes/no):")
+    print("\nShare of has_text (yes/no):")
+    # Display the proportion of reviews with and without text
     print((has_text_counts / total).round(3))
 
-    print("\nРаспределение stance (в целом):")
+    print("\nOverall stance distribution:")
+    # Show total counts of each stance category
     print(stance_overall)
 
-    print("\nРаспределение stance по платформам:")
+    print("\nStance distribution by platform:")
+    # Display stance counts grouped by source platform (GoogleMaps / YandexMaps)
     print(stance_by_platform)
 
-    print("\nРаспределение stance по кейсам:")
+    print("\nStance distribution by case:")
+    # Display stance counts grouped by case (DAA / KTR)
     print(stance_by_case)
 
-    print(f"\nДоля записей с НЕ нормализованной датой (post_date_norm is NaT): {not_norm_share:.3%}")
+    # Display the share of records where date normalization failed (NaT values)
+    print(f"\nShare of records with NON-normalized date (post_date_norm is NaT): {not_norm_share:.3%}")
 
+    # Warn about non-critical missing columns, if any were found
     if missing_cols:
-        print("\nОтсутствуют обязательные столбцы (не критично, но учти):", ", ".join(missing_cols))
+        print("\nMissing required columns (not critical but should be reviewed):", ", ".join(missing_cols))
 
     if value_issues:
-        print("\nПодозрительные значения в полях:")
+        print("\nSuspicious or unexpected values in categorical fields:")
         for k, v in value_issues.items():
             print(f"- {k}: {v}")
 
-    print("\nПустые 'text' (включая NaN/пустые строки):", int(text_empty.sum()), "из", total)
+    # Display the total number of empty text entries (NaN or blank strings)
+    print("\nEmpty 'text' entries (including NaN / blank strings):", int(text_empty.sum()), "of", total)
 
     if not possible_dups.empty:
-        print("\nВозможные дубликаты (по ключу case+source_platform+text+rating_1_5): всего групп =", len(possible_dups))
-        print("Топ-10 повторов:")
+        print("\nPossible duplicates (based on key: case + source_platform + text + rating_1_5)")
+        print("Total duplicate groups:", len(possible_dups))
+        print("Top 10 most frequent duplicates:")
         print(top10_dups)
     else:
-        print("\nВозможных дубликатов по ключу не найдено.")
+        print("\nNo potential duplicates detected based on the composite key.")
 
-    # Проверка формата theme_codes
+    # Validate the format of 'theme_codes'
     ok_theme = normalize_theme_codes_format(df)
     bad_theme_n = int((~ok_theme).sum())
-    if bad_theme_n > 0:
-        print(f"\nВНИМАНИЕ: {bad_theme_n} строк с некорректным форматом theme_codes (разрешены a-z, 0-9, '_', ';' без пробелов).")
 
-    # Вывод путей
-    print("\n=== ФАЙЛЫ СОХРАНЕНЫ В ===")
+    # Warn if there are rows with invalid theme_codes format
+    if bad_theme_n > 0:
+        print(f"\nWARNING: {bad_theme_n} rows contain invalid theme_codes format "
+              "(allowed: a-z, 0-9, '_', ';' — no spaces).")
+
+    # Display output file summary
+    print("\n=== FILES SAVED TO ===")
     print(args.outdir)
     print(" - reviews_master_clean.parquet")
     print(" - reviews_master_clean.feather")
     print(" - counts_by_case_platform.csv")
     print(" - stance_by_case_platform.csv")
     print(" - theme_codes_raw.txt")
-    print(" - hist_rating_1_5.png (если rating присутствует)")
+    print(" - hist_rating_1_5.png (if 'rating_1_5' column exists)")
     print(" - bar_stance_by_case.png")
     print(" - bar_stance_by_platform.png")
 
-
 if __name__ == "__main__":
+    # Entry point for script execution.
+    # When the script is run directly (not imported as a module),
+    # execute the main() function.
     main()
