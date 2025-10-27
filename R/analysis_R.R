@@ -36,12 +36,12 @@ df <- read_feather(file.path(out_dir, "reviews_master_clean.feather")) %>%
 # Convert key variables to proper types
 df <- df %>%
   mutate(
-    post_date_norm = as_date(post_date_norm),               # convert to Date
+    post_date_norm = as_date(post_date_norm),   # convert to Date
     rating_1_5_num = suppressWarnings(as.integer(rating_1_5)), # safely coerce to integer
-    has_text = as.factor(has_text),                         # categorical yes/no
-    stance = as.factor(stance),                             # stance categories
-    case = as.factor(case),                                 # DAA / KTR
-    source_platform = as.factor(source_platform)             # GoogleMaps / YandexMaps
+    has_text = as.factor(has_text),    # categorical yes/no
+    stance = as.factor(stance),   # stance categories
+    case = as.factor(case),  # DAA / KTR
+    source_platform = as.factor(source_platform) # GoogleMaps / YandexMaps
   )
 
 # ==== Summaries =====
@@ -88,7 +88,7 @@ write_csv(tab_stance_by_case, file.path(out_dir, "R_stance_by_case.csv"))
 df_time <- df %>%
   filter(!is.na(post_date_norm)) %>%
   mutate(
-    year = year(post_date_norm),                    # extract year
+    year = year(post_date_norm),    # extract year
     ym = floor_date(post_date_norm, unit = "month") # extract year-month
   )
 
@@ -250,7 +250,7 @@ ggsave(
   dpi = 200
 )
 
-# ==== Skeleton for difference tests (placeholder) ====
+# ==== Draft for difference tests (placeholder) ====
 
 # Example: compare the distribution of 'stance' across platforms (Chi-square test).
 # What this does:
@@ -261,7 +261,7 @@ ggsave(
 # - Ensure sample sizes are sufficient; expected counts per cell should generally be ≥ 5.
 # - Decide in advance whether to collapse rare stance categories (e.g., merge 'mixed' with 'neutral')
 #   if expected counts are too small.
-# - After creating 'stance_xtab', you can run:
+# - After creating 'stance_xtab', we can run:
 #       chisq.test(stance_xtab)
 #   and inspect residuals with:
 #       chisq.test(stance_xtab)$residuals
@@ -269,14 +269,14 @@ ggsave(
 #   or simulate p-values in chisq.test(simulate.p.value = TRUE, B = 10000).
 
 stance_xtab <- df %>%
-  count(source_platform, stance) %>%                # 1) contingency tallies
-  pivot_wider(names_from = stance,                  # 2) wide table: columns = stance
+  count(source_platform, stance) %>%  # 1) contingency tallies
+  pivot_wider(names_from = stance,   # 2) wide table: columns = stance
               values_from = n,
               values_fill = 0) %>%
-  column_to_rownames("source_platform") %>%         # rows = platforms
-  as.matrix()                                       # 3) matrix for chisq.test()
+  column_to_rownames("source_platform") %>%  # rows = platforms
+  as.matrix()     # 3) matrix for chisq.test()
 
-# chi_sq_result <- chisq.test(stance_xtab)   # <- Uncomment after deciding on comparison groups
+# chi_sq_result <- chisq.test(stance_xtab) # <- Uncomment after deciding on comparison groups
 
 # Example: compare mean rating between platforms (optionally filtered by has_text, etc.)
 # This block demonstrates exploratory statistical testing, but is not run automatically.
