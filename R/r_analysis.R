@@ -6,12 +6,12 @@ install.packages(c("tidyverse","arrow","janitor","lubridate","tidytext","ggtheme
 # Load libraries quietly to keep console output clean
 suppressPackageStartupMessages({
   library(tidyverse)  # dplyr/tidyr/readr/ggplot2, etc.
-  library(arrow)      # read/write Feather/Parquet
-  library(janitor)    # clean_names(), quick tabulations
-  library(lubridate)  # date handling
-  library(tidytext)   # text tokenization (if needed)
-  library(ggthemes)   # optional ggplot themes
-  library(scales)     # number/date scales for plots
+  library(arrow)   # read/write Feather/Parquet
+  library(janitor)  # clean_names(), quick tabulations
+  library(lubridate) # date handling
+  library(tidytext) # text tokenization (if needed)
+  library(ggthemes) # optional ggplot themes
+  library(scales) # number/date scales for plots
 })
 
 # Output folder (created if missing)
@@ -28,11 +28,11 @@ df <- read_feather(feather_path) |> clean_names()  # normalize column names for 
 # Ensures consistent data types and controlled factor ordering for plots and tests.
 df <- df |>
   mutate(
-    post_date_norm   = as_date(post_date_norm),                                # normalize date
-    rating_1_5_num   = suppressWarnings(as.integer(rating_1_5)),               # safely cast to integer
-    has_text         = factor(has_text),                                       # yes/no indicator
+    post_date_norm   = as_date(post_date_norm),     # normalize date
+    rating_1_5_num   = suppressWarnings(as.integer(rating_1_5)), # safely cast to integer
+    has_text         = factor(has_text),   # yes/no indicator
     stance           = factor(stance, levels = c("negative","mixed","neutral","positive")), # ordered stance
-    case             = factor(case, levels = c("DAA","KTR")),                  # two study cases
+    case             = factor(case, levels = c("DAA","KTR")),  # two study cases
     source_platform  = factor(source_platform, levels = c("GoogleMaps","YandexMaps")) # unified platform naming
   )
 
@@ -102,8 +102,8 @@ write_csv(tab_rating_platform,   file.path(out_dir, "summary_rating_by_platform.
 # Define a clean, readable ggplot theme for consistency across all charts.
 theme_pub <- theme_minimal(base_size = 12) +
   theme(
-    panel.grid.minor = element_blank(),          # remove minor gridlines for clarity
-    plot.title = element_text(face = "bold")     # bold titles for emphasis
+    panel.grid.minor = element_blank(),  # remove minor gridlines for clarity
+    plot.title = element_text(face = "bold") # bold titles for emphasis
   )
 
 # Stance by case (stacked bar chart)
@@ -214,14 +214,14 @@ ggsave(
 
 # 4) theme_codes to long format, frequencies, and heatmap-ready table
 theme_long <- df |>
-  select(case, source_platform, theme_codes) |>                          # keep only fields we need
+  select(case, source_platform, theme_codes) |>    # keep only fields we need
   mutate(theme_codes = if_else(is.na(theme_codes) | theme_codes == "",   # turn empty strings into NA
                                NA_character_, theme_codes)) |>
-  separate_rows(theme_codes, sep = ";", convert = FALSE) |>              # split "a;b;c" into rows
-  filter(!is.na(theme_codes), theme_codes != "") |>                      # drop empties after split
-  mutate(theme_codes = factor(theme_codes))                              # factor for plotting/tables
+  separate_rows(theme_codes, sep = ";", convert = FALSE) |>   # split "a;b;c" into rows
+  filter(!is.na(theme_codes), theme_codes != "") |>   # drop empties after split
+  mutate(theme_codes = factor(theme_codes))  # factor for plotting/tables
 
-write_csv(theme_long, file.path(out_dir, "theme_codes_long.csv"))        # save long-format tags
+write_csv(theme_long, file.path(out_dir, "theme_codes_long.csv"))  # save long-format tags
 
 # Top-15 most frequent theme codes
 # Summarizes which thematic tags appear most often across all reviews.
@@ -281,7 +281,7 @@ p_heat <- heat_dat |>
   theme_pub
 ggsave(file.path(out_dir, "themes_heatmap.png"), p_heat, width = 7.5, height = 8.5, dpi = 200)
 
-# ==== 5) Statistics ===========================================================
+# 5) Statistics 
 # 5.1 Chi-square test: does stance distribution differ by platform?
 # Build a platform × stance contingency table, then run chisq.test().
 # suppressWarnings() hides warnings about low expected counts; results are saved to a .txt file.
@@ -297,7 +297,7 @@ capture.output(chisq_result, file = file.path(out_dir, "chisq_stance_by_platform
 # 5.2 Differences in rating between cases (t-test and Wilcoxon)
 rate_case <- df |>
   filter(!is.na(rating_1_5_num)) |>
-  select(case, rating_1_5_num)      # keep only the grouping factor (case) and the numeric rating
+  select(case, rating_1_5_num)  # keep only the grouping factor (case) and the numeric rating
 
 tt <- t.test(rating_1_5_num ~ case, data = rate_case)
 # Two-sample (independent) t-test comparing mean rating_1_5_num between DAA and KTR.
@@ -362,16 +362,16 @@ ggsave(
 # ==== Heatmap theme_codes × stance ====
 # Load packages needed for reading Feather/Parquet (arrow) and data wrangling/plotting (tidyverse).
 library(arrow)
-library(tidyverse)  # dplyr, tidyr, readr, ggplot2
+library(tidyverse) # dplyr, tidyr, readr, ggplot2
 
 # Define the case and file paths
-case_target <- "DAA"   # change to "KTR" for the other site
+case_target <- "DAA" # change to "KTR" for the other site
 base_out <- "./out"
 in_file <- file.path(base_out, case_target, paste0("reviews_", case_target, ".feather"))
 
 # Print the expected file path for verification
-print(in_file)            # should show ./out/DAA/reviews_DAA.feather
-file.exists(in_file)      # returns TRUE if the file actually exists
+print(in_file)  # should show ./out/DAA/reviews_DAA.feather
+file.exists(in_file) # returns TRUE if the file actually exists
 
 # Set the working directory to your thesis root folder
 setwd("/Users/maria/Desktop/Padova/Thesis/Thesis-DAA-KTR")
@@ -423,11 +423,11 @@ if (nrow(themes_long) > 0) {
       width = 1400, height = 1000)
   heatmap(
           mat,
-          Rowv = NA,            # do not cluster rows; keep the given order
-          Colv = NA,            # do not cluster columns; keep the given order
-          scale = "row",        # z-score each row so colors reflect within-theme variation
+          Rowv = NA, # do not cluster rows; keep the given order
+          Colv = NA,  # do not cluster columns; keep the given order
+          scale = "row",  # z-score each row so colors reflect within-theme variation
           col = heat.colors(256), # base R palette; 256 color levels
-          margins = c(10, 12),  # extra space for axis labels (bottom, left)
+          margins = c(10, 12), # extra space for axis labels (bottom, left)
           main = paste0("Theme Codes × Stance — ", case_target) # plot title
   )
   # Close the graphics device and write the PNG to disk
@@ -442,18 +442,18 @@ if (nrow(themes_long) > 0) {
 set.seed(123)
 
 examples <- dat %>%
-  dplyr::filter(!is.na(text), text != "") %>%          # keep rows that actually have text
-  dplyr::group_by(stance) %>%                           # group by stance category
-  dplyr::group_modify(~ dplyr::slice_sample(            # sample up to 3 rows within each stance
+  dplyr::filter(!is.na(text), text != "") %>%  # keep rows that actually have text
+  dplyr::group_by(stance) %>%  # group by stance category
+  dplyr::group_modify(~ dplyr::slice_sample( # sample up to 3 rows within each stance
     .x, n = min(3, nrow(.x))
   )) %>%
   dplyr::ungroup() %>%
-  dplyr::select(case, source_platform, stance,          # keep a compact, readable set of columns
+  dplyr::select(case, source_platform, stance,# keep a compact, readable set of columns
                 rating_1_5, text)
 
 if (nrow(examples) > 0) {
   out_csv <- file.path(out_dir, paste0("R_", case_target, "_examples_reviews.csv"))
-  readr::write_csv(examples, out_csv)                  # write sampled quotes to CSV
+  readr::write_csv(examples, out_csv)   # write sampled quotes to CSV
   message("Quotes saved: ", out_csv)
 } else {
   message("No texts found; CSV with quotes was not created.")
@@ -466,8 +466,8 @@ base_out <- "./out"
 in_file <- file.path(base_out, case_target, paste0("reviews_", case_target, ".feather"))
 out_dir <- file.path(base_out, case_target)
 
-print(in_file)                 # should print "./out/KTR/reviews_KTR.feather"
-file.exists(in_file)           # quick check: TRUE if the file actually exists
+print(in_file)  # should print "./out/KTR/reviews_KTR.feather"
+file.exists(in_file)  # quick check: TRUE if the file actually exists
 
 # Load the Feather dataset for KTR
 dat <- arrow::read_feather(in_file)
@@ -485,9 +485,9 @@ dat$source_platform <- as.character(dat$source_platform)
 # and prepare the data for visualization.
 
 themes_long <- dat %>%
-  filter(!is.na(theme_codes), theme_codes != "") %>%   # drop empty theme entries
-  tidyr::separate_rows(theme_codes, sep = ";") %>%     # split multiple codes into separate rows
-  count(theme_codes, stance, name = "n")               # count how often each tag appears per stance
+  filter(!is.na(theme_codes), theme_codes != "") %>% # drop empty theme entries
+  tidyr::separate_rows(theme_codes, sep = ";") %>%  # split multiple codes into separate rows
+  count(theme_codes, stance, name = "n") # count how often each tag appears per stance
 
 if (nrow(themes_long) > 0) {
   # Identify top 30 most frequent tags across all stance categories
@@ -512,9 +512,9 @@ if (nrow(themes_long) > 0) {
       width = 1400, height = 1000)
   heatmap(
     mat,
-    Rowv = NA,            # do not reorder rows (keep declared order)
-    Colv = NA,            # do not reorder columns
-    scale = "row",        # z-score per row to compare relative intensities
+    Rowv = NA,  # do not reorder rows (keep declared order)
+    Colv = NA, # do not reorder columns
+    scale = "row", # z-score per row to compare relative intensities
     col = heat.colors(256),
     margins = c(10, 12),
     main = paste0("Theme Codes × Stance — ", case_target)
@@ -530,16 +530,16 @@ if (nrow(themes_long) > 0) {
 set.seed(123)  # ensures reproducibility of random sampling
 
 examples <- dat %>%
-  dplyr::filter(!is.na(text), text != "") %>%              # keep reviews with non-empty text
-  dplyr::group_by(stance) %>%                              # group by stance (positive, negative, etc.)
-  dplyr::group_modify(~ dplyr::slice_sample(.x,            # randomly sample up to 3 per stance
+  dplyr::filter(!is.na(text), text != "") %>% # keep reviews with non-empty text
+  dplyr::group_by(stance) %>%  # group by stance (positive, negative, etc.)
+  dplyr::group_modify(~ dplyr::slice_sample(.x, # randomly sample up to 3 per stance
                                             n = min(3, nrow(.x)))) %>%
   dplyr::ungroup() %>%
   dplyr::select(case, source_platform, stance, rating_1_5, text)  # keep only relevant fields
 
 if (nrow(examples) > 0) {
   out_csv <- file.path(out_dir, paste0("R_", case_target, "_examples_reviews.csv"))
-  readr::write_csv(examples, out_csv)                     # export selected examples
+  readr::write_csv(examples, out_csv) # export selected examples
   message("Quotes saved: ", out_csv)
 } else {
   message("No texts found; CSV with quotes was not created.")
