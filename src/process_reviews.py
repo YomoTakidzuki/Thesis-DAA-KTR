@@ -10,18 +10,18 @@ Preprocessing pipeline for DAA/KTR review data:
 - two simple plots (matplotlib, no seaborn).
 """
 
-import argparse              # CLI argument parsing
-import os                    # filesystem paths, directory creation
-import re                    # regex for validating/cleaning fields
+import argparse  # CLI argument parsing
+import os # filesystem paths, directory creation
+import re  # regex for validating/cleaning fields
 from collections import Counter  # quick frequency summaries in validation
 from datetime import datetime, timedelta  # anchor date + relative date math
 
-import pandas as pd          # core data handling
+import pandas as pd # core data handling
 from dateutil.parser import parse as du_parse  # robust generic date parser (fallback)
-import dateparser            # natural-language dates in RU/EN (“3 months ago”, etc.)
+import dateparser   # natural-language dates in RU/EN (“3 months ago”, etc.)
 import matplotlib.pyplot as plt  # basic plotting (histograms/bars)
 
-ANCHOR_DATE = datetime(2025, 9, 16)   # Anchor date used to convert relative phrases like "3 months ago" into an absolute date.
+ANCHOR_DATE = datetime(2025, 9, 16) # Anchor date used to convert relative phrases like "3 months ago" into an absolute date.
 
 # Columns that must be present in the input file. If any are missing, the script reports it (and for some steps creates empty placeholders).
 REQUIRED_COLS = [
@@ -30,10 +30,10 @@ REQUIRED_COLS = [
 ]
 
 # Allowed categorical vocabularies for quick validation/sanity checks.
-ALLOWED_CASE = {"DAA", "KTR"}                     # Case identifiers (two study sites).
-ALLOWED_SOURCE = {"GoogleMaps", "YandexMaps"}     # Platforms where reviews were collected.
+ALLOWED_CASE = {"DAA", "KTR"}  # Case identifiers (two study sites).
+ALLOWED_SOURCE = {"GoogleMaps", "YandexMaps"} # Platforms where reviews were collected.
 ALLOWED_STANCE = {"positive", "negative", "neutral", "mixed"}  # Sentiment/stance labels.
-ALLOWED_HAS_TEXT = {"yes", "no"}                  # Whether a review contains text (beyond rating).
+ALLOWED_HAS_TEXT = {"yes", "no"}   # Whether a review contains text (beyond rating).
 
 REL_PATTERNS = [
     # The order is important: first years → months → weeks → days.
@@ -172,9 +172,9 @@ def normalize_theme_codes_format(df: pd.DataFrame) -> pd.Series:
         return pd.Series([True] * len(df), index=df.index)
 
     # Regular expression pattern:
-    # ^[a-z0-9_]+        → at least one valid character (letter, digit, underscore)
-    # (?:;[a-z0-9_]+)*   → optionally followed by semicolon-separated additional codes
-    # $                  → must end after the last code (no trailing spaces)
+    # ^[a-z0-9_]+  -> at least one valid character (letter, digit, underscore)
+    # (?:;[a-z0-9_]+)* ->optionally followed by semicolon-separated additional codes
+    # $     -> must end after the last code (no trailing spaces)
     pat = re.compile(r"^[a-z0-9_]+(?:;[a-z0-9_]+)*$")  # digits are allowed too
 
     # Fill NaNs, strip spaces, and test against the pattern
@@ -241,7 +241,7 @@ def parse_post_date(raw) -> pd.Timestamp:
         return pd.NaT
 
     # 1) If it's already a datetime-like object (Timestamp/datetime/date)
-    # → convert to pandas Timestamp and normalize (drop time part)
+    # -> convert to pandas Timestamp and normalize (drop time part)
     if isinstance(raw, (pd.Timestamp, datetime, date)):
         return pd.to_datetime(raw).normalize()
 
@@ -271,7 +271,7 @@ def parse_post_date(raw) -> pd.Timestamp:
         m = re.search(pat, s_lower)
         if m:
             try:
-                n = int(m.group(1))                     # extract the integer offset
+                n = int(m.group(1))   # extract the integer offset
                 dt = rel_to_date(ANCHOR_DATE, n, unit)  # convert relative offset to absolute date
                 return pd.Timestamp(dt.date()) if dt else pd.NaT
             except Exception:
@@ -329,7 +329,7 @@ def main():
             .fillna("")
             .str.strip()
             .str.replace(r"[,\s/]+", ";", regex=True)  # comma/space/slash → ";"
-            .str.replace(r";{2,}", ";", regex=True)    # remove duplicate semicolons
+            .str.replace(r";{2,}", ";", regex=True) # remove duplicate semicolons
             .str.strip(";")
             .str.lower()
         )
@@ -573,7 +573,6 @@ def main():
     print(" - hist_rating_1_5.png (if 'rating' column present)")
     print(" - bar_stance_by_case.png")
     print(" - bar_stance_by_platform.png")
-
 
 if __name__ == "__main__":
     main()
