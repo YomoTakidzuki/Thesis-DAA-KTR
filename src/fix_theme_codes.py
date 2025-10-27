@@ -10,13 +10,13 @@ def clean_code(code):
         return code
     return (
         str(code)
-        .lower()                       # convert to lowercase for consistency
-        .strip()                       # remove leading/trailing spaces
-        .replace(" ", "")              # remove regular spaces
-        .replace("\u00A0", "")         # remove non-breaking spaces
-        .replace("\u200b", "")         # remove zero-width spaces
-        .replace("；", ";")            # replace full-width (CJK) semicolon with normal one
-        .replace(",", ";")             # replace commas with semicolons
+        .lower()   # convert to lowercase for consistency
+        .strip()    # remove leading/trailing spaces
+        .replace(" ", "")  # remove regular spaces
+        .replace("\u00A0", "")  # remove non-breaking spaces
+        .replace("\u200b", "")  # remove zero-width spaces
+        .replace("；", ";") # replace full-width (CJK) semicolon with normal one
+        .replace(",", ";") # replace commas with semicolons
     )
 
 # Apply cleaning function to the 'theme_codes' column
