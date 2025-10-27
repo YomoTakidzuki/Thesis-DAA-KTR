@@ -77,7 +77,7 @@ Thesis-DAA-KTR/
 └── README.md
 ```
 
-## How to Run the Analysis
+## How to кun the фnalysis
 
 This section describes how to reproduce the data-processing and visual analysis pipeline step by step.  
 Both **Python (≥ 3.10)** and **R (≥ 4.3)** are required.
@@ -91,13 +91,14 @@ Both **Python (≥ 3.10)** and **R (≥ 4.3)** are required.
 **Python**
 ```bash
 pip install pandas numpy pyarrow matplotlib seaborn
-
+```
 **R**
+```
 install.packages(c(
   "tidyverse", "arrow", "janitor", "lubridate",
   "ggthemes", "ggplot2", "scales", "tidytext"
 ))
-
+```
 The analysis was run in macOS / Linux terminal and RStudio 2024.
 All scripts were tested under reproducible environments; no external APIs are called.
 
@@ -125,6 +126,7 @@ Scripts are grouped by language for clarity.
 
 ### Python scripts (`/src`)
 
+```
 | File | Description |
 |------|--------------|
 | `process_reviews.py` | Cleans and standardizes review data: removes HTML tags, fixes date formats, converts ratings to numeric, and saves as Feather/Parquet. |
@@ -132,11 +134,12 @@ Scripts are grouped by language for clarity.
 | `split_by_case.py` | Automatically separates the dataset into two subsets: DAA and KTR, storing results in `out/DAA/` and `out/KTR/`. |
 | `analysis.py` | High-level coordination script for Python-side pre-processing. |
 | `run_all.sh` | Shell helper to run the entire sequence (Python + R) in the correct order. |
-
+```
 ---
 
 ### R scripts (`/R`)
 
+```
 | File | Description |
 |------|--------------|
 | `analysis_R.R` | Initial descriptive statistics and visualizations (stance, ratings, timelines). |
@@ -144,7 +147,7 @@ Scripts are grouped by language for clarity.
 | `r_analysis_per_case.R` | Generates case-specific heatmaps and wordclouds for DAA and KTR separately. |
 | `fix_reviews_per_year.R` | Filters out empty or irrelevant early years (before 2015) to avoid misleading charts. |
 | `table_summary.R` | Exports consolidated summary tables (mean rating, stance by platform, etc.) to CSV format. |
-
+```
 ---
 
 > All scripts can be run individually or sequentially through `run_all.sh`.  
@@ -162,7 +165,7 @@ If you use this code, figures, or methodology in your own research, please cite 
 > **Poputneva, M. (2025).**  
 > *From Silence to Reuse in St Petersburg Industrial Heritage through Two Case Studies.*  
 > Master’s thesis, University of Padua, Local Development Programme.  
-> Repository: [https://github.com/mariia-poputneva/Thesis-DAA-KTR](https://github.com/mariia-poputneva/Thesis-DAA-KTR)
+> Repository: [[https://github.com/YomoTakidzuki/Thesis-DAA-KTR](https://github.com/YomoTakidzuki/Thesis-DAA-KTR)
 
 ---
 
@@ -179,7 +182,7 @@ The author would like to thank:
 ---
 
 ## Repository summary
-
+```
 | Component | Role |
 |------------|------|
 | `/data/` | Contains anonymized, cleaned input dataset (`reviews_master.xlsx`). |
@@ -188,14 +191,14 @@ The author would like to thank:
 | `/out/` | Final non-sensitive outputs used in the thesis. |
 | `Appendix.Reproducible_Code-Colab.pdf` | Step-by-step code appendix for reproducibility. |
 | `README.md` | This documentation file. |
-
+```
 ---
 
 ### Contact
 
 For academic inquiries or collaboration:
 
-**Mariia Poputneva**  
-MA Local Development (University of Padua)  
-poputnevam@gmail.com  
-Padova — St Petersburg — Leipzig  
+**Mariia Poputneva**
+MA Local Development (University of Padua)
+poputnevam@gmail.com
+Padova — St Petersburg — Leipzig
