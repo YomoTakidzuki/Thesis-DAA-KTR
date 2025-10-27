@@ -15,15 +15,15 @@ install.packages("ggplot2")
 install.packages("gridExtra")
 
 suppressPackageStartupMessages({
-  library(dplyr)       # data wrangling (count, mutate, bind_rows, etc.)
-  library(arrow)       # read_feather()
-  library(tidyr)       # pivot_wider()
-  library(ggplot2)     # not used directly for plotting here, but often handy
-  library(gridExtra)   # tableGrob() to render a data.frame as a table graphic
+  library(dplyr)  # data wrangling (count, mutate, bind_rows, etc.)
+  library(arrow) # read_feather()
+  library(tidyr)  # pivot_wider()
+  library(ggplot2)  # not used directly for plotting here, but often handy
+  library(gridExtra)  # tableGrob() to render a data.frame as a table graphic
 })
 
-in_file <- "./out/reviews_master_clean.feather"   # input Feather file (clean layer)
-out_png <- "./out/summary_table_R.png"            # output table image path
+in_file <- "./out/reviews_master_clean.feather" # input Feather file (clean layer)
+out_png <- "./out/summary_table_R.png" # output table image path
 
 # Load the cleaned dataset (must exist beforehand)
 df <- read_feather(in_file)
@@ -33,10 +33,10 @@ tab <- df %>%
   count(case, source_platform) %>%
   tidyr::pivot_wider(
     names_from = source_platform,  # columns become platforms (GoogleMaps / YandexMaps)
-    values_from = n,               # cell values are counts
-    values_fill = 0                # fill missing combos with 0
+    values_from = n,  # cell values are counts
+    values_fill = 0  # fill missing combos with 0
   ) %>%
-  mutate(Всего = GoogleMaps + YandexMaps)   # add a Russian-labeled total column (“Всего”)
+  mutate(Всего = GoogleMaps + YandexMaps) # add a Russian-labeled total column (“Всего”)
 
 # Add a grand total row at the bottom.
 # NOTE: This introduces a second total column named "Total" in English, while the row above
