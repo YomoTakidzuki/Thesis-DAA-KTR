@@ -24,7 +24,7 @@ df <- arrow::read_feather(in_feather) |>
   mutate(post_date_norm = as_date(post_date_norm)) |>
   filter(!is.na(post_date_norm)) |>
   mutate(year = year(post_date_norm)) |>
-  filter(year >= 2015, year <= year(Sys.Date()))   # remove out-of-range data
+  filter(year >= 2015, year <= year(Sys.Date()))  # remove out-of-range data
 
 # Count reviews per year
 tab_year <- df |> count(year, name = "n") |> arrange(year)
@@ -54,14 +54,14 @@ ggsave(out_png, p_year, width = 7.5, height = 4.5, dpi = 200)
 
 suppressPackageStartupMessages({
   library(tidyverse)  # dplyr/ggplot2/readr helpers
-  library(arrow)      # fast Feather/Parquet I/O
+  library(arrow)   # fast Feather/Parquet I/O
   library(lubridate)  # date handling (year(), etc.)
 })
 
 # Use your thesis working directory (adjust if needed)
 setwd("/Users/maria/Desktop/Padova/Thesis/Thesis-DAA-KTR")
 
-case_target <- "KTR"   # <-- fix the target case explicitly
+case_target <- "KTR"  # <-- fix the target case explicitly
 
 # Build input/output paths inside ./out/KTR
 in_dir   <- file.path("out", case_target)
