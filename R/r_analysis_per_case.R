@@ -25,16 +25,16 @@ df <- df %>%
     rating_1_5_num  = suppressWarnings(as.integer(rating_1_5)),  # safely cast ratings to integer
     has_text        = factor(has_text),    # yes/no as factor
     stance          = factor(stance),      # categorical stance (pos/neg/etc.)
-    source_platform = factor(source_platform)       # categorical platform
+    source_platform = factor(source_platform) # categorical platform
   )
 
-# ==== Summary tables: frequencies and aggregates ====
+# Summary tables: frequencies and aggregates
 
 # 1. stance × platform — absolute and relative frequencies
 df %>%
   count(source_platform, stance, name = "n") %>%
   group_by(source_platform) %>%
-  mutate(p = n / sum(n)) %>%    # relative share within platform
+  mutate(p = n / sum(n)) %>%  # relative share within platform
   ungroup() %>%
   arrange(source_platform, desc(n)) %>%
   write_csv(file.path(out_dir, paste0("R_", case_target, "_stance_by_platform.csv")))
@@ -57,7 +57,7 @@ df %>%
   arrange(desc(n)) %>%
   write_csv(file.path(out_dir, paste0("R_", case_target, "_mean_rating_by_platform.csv")))
 
-# ==== Plots (ggplot) ====
+# Plots (ggplot)
 # Stance by platform (stacked bar chart)
 # Visualizes how stance categories are distributed across review platforms for the given case.
 p1 <- df %>%
@@ -162,7 +162,7 @@ ggsave(
   dpi = 200
 )
 
-# ==== wordcloud ====
+# wordcloud
 # RU+EN stopwords (simple combined list).
 # We merge a small custom Russian stoplist with tidytext's built-in English stopwords.
 stop_ru <- c(
@@ -183,7 +183,7 @@ txt <- df %>%
 
 # Tokenize text into individual words and clean
 tokens <- txt %>%
-  unnest_tokens(word, text, token = "words") %>%   # break each review into words
+  unnest_tokens(word, text, token = "words") %>% # break each review into words
   mutate(word = str_to_lower(word)) %>%  # lowercase for consistency
   filter(str_detect(word, "^[\\p{L}\\p{N}]{3,}$")) %>%  # keep only words ≥3 chars (letters/numbers)
   filter(!word %in% stops)   # exclude RU+EN stopwords
@@ -239,7 +239,7 @@ for (plat in levels(df$source_platform)) {
   }
 }
 
-# — Simple statistical tests —
+# Simple statistical tests
 # 1) Chi-square test: checks whether the distribution of stance differs by source_platform.
 # We first build a contingency table source_platform × stance, then run chisq.test()
 # only if we have at least 2 rows (i.e., at least two platforms present).
