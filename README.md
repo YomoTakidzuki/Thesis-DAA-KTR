@@ -77,7 +77,7 @@ Thesis-DAA-KTR/
 └── README.md
 ```
 
-## How to кun the фnalysis
+## How to кun the analysis
 
 This section describes how to reproduce the data-processing and visual analysis pipeline step by step.  
 Both **Python (≥ 3.10)** and **R (≥ 4.3)** are required.
